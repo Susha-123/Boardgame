@@ -41,12 +41,17 @@ pipeline {
             }
         }
         stage('Quality Gate') {
-            steps {
-                script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+    steps {
+        script {
+            timeout(time: 2, unit: 'MINUTES') {
+                def qg = waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token'
+                if (qg.status != 'OK') {
+                    error "Pipeline aborted due to SonarQube Quality Gate failure: ${qg.status}"
                 }
             }
         }
+    }
+}
         stage('Build') {
             steps {
                 sh "mvn package"
