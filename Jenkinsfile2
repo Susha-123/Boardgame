@@ -20,17 +20,13 @@ pipeline {
 
         stage('Compile') {
             steps {
-                dir('database_service_project') {
-                    sh "mvn compile"
-                }
+                sh 'mvn compile'
             }
         }
 
         stage('Test') {
             steps {
-                dir('database_service_project') {
-                    sh "mvn test"
-                }
+                sh 'mvn test'
             }
         }
 
@@ -43,14 +39,12 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    dir('database_service_project') {
-                        sh """
-                            $SCANNER_HOME/bin/sonar-scanner \
-                            -Dsonar.projectName=BoardGame \
-                            -Dsonar.projectKey=BoardGame \
-                            -Dsonar.java.binaries=.
-                        """
-                    }
+                    sh """
+                        $SCANNER_HOME/bin/sonar-scanner \
+                        -Dsonar.projectName=BoardGame \
+                        -Dsonar.projectKey=BoardGame \
+                        -Dsonar.java.binaries=target/classes
+                    """
                 }
             }
         }
@@ -70,34 +64,30 @@ pipeline {
 
         stage('Build') {
             steps {
-                dir('database_service_project') {
-                    sh "mvn package"
-                }
+                sh 'mvn package'
             }
         }
 
         stage('Update Version') {
             steps {
-                dir('database_service_project') {
-                    script {
-                        def newVersion = "0.0.${BUILD_NUMBER}"
-                        echo "🔷 Updating Maven project version to: ${newVersion}"
+                script {
+                    def newVersion = "0.0.${BUILD_NUMBER}"
+                    echo "🔷 Updating Maven project version to: ${newVersion}"
 
-                        sh """
-                            mvn --batch-mode versions:set -DnewVersion=${newVersion}
-                            mvn --batch-mode versions:commit
-                        """
+                    sh """
+                        mvn --batch-mode versions:set -DnewVersion=${newVersion}
+                        mvn --batch-mode versions:commit
+                    """
 
-                        def effectiveVersion = sh(
-                            script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
-                            returnStdout: true
-                        ).trim()
+                    def effectiveVersion = sh(
+                        script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
+                        returnStdout: true
+                    ).trim()
 
-                        echo "✅ Maven project.version is now: ${effectiveVersion}"
+                    echo "✅ Maven project.version is now: ${effectiveVersion}"
 
-                        if (effectiveVersion != newVersion) {
-                            error("❌ Version mismatch: expected ${newVersion} but got ${effectiveVersion}")
-                        }
+                    if (effectiveVersion != newVersion) {
+                        error("❌ Version mismatch: expected ${newVersion} but got ${effectiveVersion}")
                     }
                 }
             }
@@ -105,10 +95,8 @@ pipeline {
 
         stage('Publish To Nexus') {
             steps {
-                dir('database_service_project') {
-                    withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', traceability: true) {
-                        sh "mvn clean deploy"
-                    }
+                withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', traceability: true) {
+                    sh "mvn clean deploy"
                 }
             }
         }
