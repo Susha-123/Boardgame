@@ -1,194 +1,131 @@
-pipeline {
-    agent any
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>2.5.6</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
+	<groupId>com.javaproject</groupId>
+	<artifactId>database_service_project</artifactId>
+	<version>0.0.4</version>
+	<name>database_service_project</name>
+	<description>Project for Spring Boot</description>
+	<packaging>jar</packaging>
+	<properties>
+		<java.version>11</java.version>
+		<jacoco.version>0.8.7</jacoco.version>
+   		<sonar.java.coveragePlugin>jacoco</sonar.java.coveragePlugin>
+    		<sonar.dynamicAnalysis>reuseReports</sonar.dynamicAnalysis>
+    		<sonar.jacoco.reportPath>${project.basedir}/../target/jacoco.exec</sonar.jacoco.reportPath>
+    		<sonar.language>java</sonar.language>
+		
+	</properties>
 
-    tools {
-        jdk 'jdk17'
-        maven 'maven3'
-    }
+	<dependencies>
+		<dependency>
+			<groupId>org.thymeleaf.extras</groupId>
+			<artifactId>thymeleaf-extras-springsecurity5</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
 
-    environment {
-        SCANNER_HOME = tool 'sonar-scanner'
-    }
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jdbc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-thymeleaf</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
 
-    stages {
+		<dependency>
+    <groupId>org.jacoco</groupId> 
+    <artifactId>jacoco-maven-plugin</artifactId>
+    <version>0.8.7</version>
+</dependency>
+	</dependencies>
 
-        stage('Git Checkout') {
-            steps {
-                git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Susha-123/Boardgame.git'
-            }
-        }
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
 
-        stage('Compile') {
-            steps {
-                dir('database_service_project') {
-                    sh "mvn compile"
-                }
-            }
-        }
+			<plugin>
+    <groupId>org.jacoco</groupId>
+    <artifactId>jacoco-maven-plugin</artifactId>
+    <version>${jacoco.version}</version>
+    <executions>
+        <execution>
+            <id>jacoco-initialize</id>
+            <goals>
+                <goal>prepare-agent</goal>
+            </goals>
+        </execution>
+        <execution>
+            <id>jacoco-site</id>
+            <phase>package</phase>
+            <goals>
+                <goal>report</goal>
+            </goals>
+        </execution>
+    </executions>
+</plugin>
+		</plugins>
+	</build>
 
-        stage('Test') {
-            steps {
-                dir('database_service_project') {
-                    sh "mvn test"
-                }
-            }
-        }
 
-        stage('File System Scan') {
-            steps {
-                sh "trivy fs --format table -o trivy-fs-report.html ."
-            }
-        }
+	 <distributionManagement>
+        <repository>
+            <id>maven-releases</id>
+            <url>http://3.133.114.102:8081/repository/maven-releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>maven-snapshots</id>
+            <url>http://3.133.114.102:8081/repository/maven-snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
 
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('sonar') {
-                    dir('database_service_project') {
-                        sh """
-                            $SCANNER_HOME/bin/sonar-scanner \
-                            -Dsonar.projectName=BoardGame \
-                            -Dsonar.projectKey=BoardGame \
-                            -Dsonar.java.binaries=.
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                script {
-                    timeout(time: 1, unit: 'MINUTES') {
-                        def qg = waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token'
-                        if (qg.status != 'OK') {
-                            error "Pipeline aborted due to SonarQube Quality Gate failure: ${qg.status}"
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Build') {
-            steps {
-                dir('database_service_project') {
-                    sh "mvn package"
-                }
-            }
-        }
-
-        stage('Update Version') {
-            steps {
-                dir('database_service_project') {
-                    script {
-                        def newVersion = "0.0.${BUILD_NUMBER}"
-                        echo "🔷 Updating Maven project version to: ${newVersion}"
-
-                        sh """
-                            mvn --batch-mode versions:set -DnewVersion=${newVersion}
-                            mvn --batch-mode versions:commit
-                        """
-
-                        def effectiveVersion = sh(
-                            script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
-                            returnStdout: true
-                        ).trim()
-
-                        echo "✅ Maven project.version is now: ${effectiveVersion}"
-
-                        if (effectiveVersion != newVersion) {
-                            error("❌ Version mismatch: expected ${newVersion} but got ${effectiveVersion}")
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Publish To Nexus') {
-            steps {
-                dir('database_service_project') {
-                    withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', traceability: true) {
-                        sh "mvn clean deploy"
-                    }
-                }
-            }
-        }
-
-        stage('Build & Tag Docker Image') {
-            steps {
-                script {
-                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                        sh "docker build -t susha123/boardshack:latest ."
-                    }
-                }
-            }
-        }
-
-        stage('Docker Image Scan') {
-            steps {
-                sh "trivy image --format table -o trivy-image-report.html susha123/boardshack:latest"
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                script {
-                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-                        sh "docker push susha123/boardshack:latest"
-                    }
-                }
-            }
-        }
-
-        stage('Deploy To Kubernetes') {
-            steps {
-                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.8.146:6443') {
-                    sh "kubectl apply -f deployment-service.yaml"
-                }
-            }
-        }
-
-        stage('Verify the Deployment') {
-            steps {
-                withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.8.146:6443') {
-                    sh "kubectl get pods -n webapps"
-                    sh "kubectl get svc -n webapps"
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            script {
-                def jobName = env.JOB_NAME
-                def buildNumber = env.BUILD_NUMBER
-                def pipelineStatus = currentBuild.result ?: 'UNKNOWN'
-                def bannerColor = pipelineStatus.toUpperCase() == 'SUCCESS' ? 'green' : 'red'
-
-                def body = """
-<html>
-<body>
-<div style="border: 4px solid ${bannerColor}; padding: 10px;">
-<h2>${jobName} - Build ${buildNumber}</h2>
-<div style="background-color: ${bannerColor}; padding: 10px;">
-<h3 style="color: white;">Pipeline Status: ${pipelineStatus.toUpperCase()}</h3>
-</div>
-<p>Check the <a href='${BUILD_URL}'>console output</a>.</p>
-</div>
-</body>
-</html>
-"""
-
-                emailext(
-                    subject: "${jobName} - Build ${buildNumber} - ${pipelineStatus.toUpperCase()}",
-                    body: body,
-                    to: 'sushanthawale0@gmail.com',
-                    from: 'vishal.pawar7415@gmail.com',
-                    replyTo: 'vishal.pawar7415@gmail.com',
-                    mimeType: 'text/html',
-                    attachmentsPattern: 'trivy-image-report.html'
-                )
-            }
-        }
-    }
-}
+</project>
