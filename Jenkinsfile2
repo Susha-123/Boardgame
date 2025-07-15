@@ -1,74 +1,60 @@
 pipeline {
     agent any
+
     tools {
         jdk 'jdk17'
         maven 'maven3'
     }
+
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
     }
+
     stages {
+
         stage('Git Checkout') {
             steps {
                 git branch: 'main', credentialsId: 'git-cred', url: 'https://github.com/Susha-123/Boardgame.git'
             }
         }
 
-        stage('Update Version') {
+        stage('Compile') {
             steps {
-                script {
-                    def baseVersion = "0.0"
-                    def buildNumber = env.BUILD_NUMBER
-                    def newVersion = "${baseVersion}.${buildNumber}"
-
-                    echo "🔷 Updating Maven project version to: ${newVersion}"
-
-                    sh """
-                        mvn --batch-mode versions:set -DnewVersion=${newVersion}
-                        mvn --batch-mode versions:commit
-                    """
-
-                    def effectiveVersion = sh(
-                        script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
-                        returnStdout: true
-                    ).trim()
-
-                    echo "✅ Maven project.version is now: ${effectiveVersion}"
-
-                    if (effectiveVersion != newVersion) {
-                        error("❌ Version mismatch: expected ${newVersion} but got ${effectiveVersion}")
-                    }
+                dir('database_service_project') {
+                    sh "mvn compile"
                 }
             }
         }
 
-        stage('Compile') {
-            steps {
-                sh "mvn compile"
-            }
-        }
         stage('Test') {
             steps {
-                sh "mvn test"
+                dir('database_service_project') {
+                    sh "mvn test"
+                }
             }
         }
+
         stage('File System Scan') {
             steps {
                 sh "trivy fs --format table -o trivy-fs-report.html ."
             }
         }
+
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    sh '''
-                        $SCANNER_HOME/bin/sonar-scanner \
-                        -Dsonar.projectName=BoardGame \
-                        -Dsonar.projectKey=BoardGame \
-                        -Dsonar.java.binaries=.
-                    '''
+                    dir('database_service_project') {
+                        sh """
+                            $SCANNER_HOME/bin/sonar-scanner \
+                            -Dsonar.projectName=BoardGame \
+                            -Dsonar.projectKey=BoardGame \
+                            -Dsonar.java.binaries=.
+                        """
+                    }
                 }
             }
         }
+
         stage('Quality Gate') {
             steps {
                 script {
@@ -81,18 +67,52 @@ pipeline {
                 }
             }
         }
+
         stage('Build') {
             steps {
-                sh "mvn package"
-            }
-        }
-        stage('Publish To Nexus') {
-            steps {
-                withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', traceability: true) {
-                    sh "mvn clean deploy"
+                dir('database_service_project') {
+                    sh "mvn package"
                 }
             }
         }
+
+        stage('Update Version') {
+            steps {
+                dir('database_service_project') {
+                    script {
+                        def newVersion = "0.0.${BUILD_NUMBER}"
+                        echo "🔷 Updating Maven project version to: ${newVersion}"
+
+                        sh """
+                            mvn --batch-mode versions:set -DnewVersion=${newVersion}
+                            mvn --batch-mode versions:commit
+                        """
+
+                        def effectiveVersion = sh(
+                            script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
+                            returnStdout: true
+                        ).trim()
+
+                        echo "✅ Maven project.version is now: ${effectiveVersion}"
+
+                        if (effectiveVersion != newVersion) {
+                            error("❌ Version mismatch: expected ${newVersion} but got ${effectiveVersion}")
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Publish To Nexus') {
+            steps {
+                dir('database_service_project') {
+                    withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', traceability: true) {
+                        sh "mvn clean deploy"
+                    }
+                }
+            }
+        }
+
         stage('Build & Tag Docker Image') {
             steps {
                 script {
@@ -102,11 +122,13 @@ pipeline {
                 }
             }
         }
+
         stage('Docker Image Scan') {
             steps {
                 sh "trivy image --format table -o trivy-image-report.html susha123/boardshack:latest"
             }
         }
+
         stage('Push Docker Image') {
             steps {
                 script {
@@ -116,6 +138,7 @@ pipeline {
                 }
             }
         }
+
         stage('Deploy To Kubernetes') {
             steps {
                 withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.8.146:6443') {
@@ -123,6 +146,7 @@ pipeline {
                 }
             }
         }
+
         stage('Verify the Deployment') {
             steps {
                 withKubeConfig(caCertificate: '', clusterName: 'kubernetes', contextName: '', credentialsId: 'k8-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://172.31.8.146:6443') {
@@ -132,6 +156,7 @@ pipeline {
             }
         }
     }
+
     post {
         always {
             script {
@@ -139,6 +164,7 @@ pipeline {
                 def buildNumber = env.BUILD_NUMBER
                 def pipelineStatus = currentBuild.result ?: 'UNKNOWN'
                 def bannerColor = pipelineStatus.toUpperCase() == 'SUCCESS' ? 'green' : 'red'
+
                 def body = """
 <html>
 <body>
@@ -152,7 +178,8 @@ pipeline {
 </body>
 </html>
 """
-                emailext (
+
+                emailext(
                     subject: "${jobName} - Build ${buildNumber} - ${pipelineStatus.toUpperCase()}",
                     body: body,
                     to: 'sushanthawale0@gmail.com',
