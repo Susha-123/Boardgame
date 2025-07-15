@@ -21,12 +21,23 @@ pipeline {
                     def buildNumber = env.BUILD_NUMBER
                     def newVersion = "${baseVersion}.${buildNumber}"
 
-                    echo "Updating project version to ${newVersion}"
+                    echo "🔷 Updating Maven project version to: ${newVersion}"
 
                     sh """
-                        mvn versions:set -DnewVersion=${newVersion}
-                        mvn versions:commit
+                        mvn --batch-mode versions:set -DnewVersion=${newVersion}
+                        mvn --batch-mode versions:commit
                     """
+
+                    def effectiveVersion = sh(
+                        script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "✅ Maven project.version is now: ${effectiveVersion}"
+
+                    if (effectiveVersion != newVersion) {
+                        error("❌ Version mismatch: expected ${newVersion} but got ${effectiveVersion}")
+                    }
                 }
             }
         }
@@ -77,9 +88,8 @@ pipeline {
         }
         stage('Publish To Nexus') {
             steps {
-                withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
-                    sh "mvn clean install"
-                    sh "mvn deploy"
+                withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'jdk17', maven: 'maven3', traceability: true) {
+                    sh "mvn clean deploy"
                 }
             }
         }
